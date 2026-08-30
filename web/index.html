@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Chat</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <!-- Login: shown until /api/me succeeds. -->
+  <section id="login" class="screen">
+    <form id="login-form" class="card">
+      <h1>Chat</h1>
+      <p class="muted">Pick a username (letters, digits, _ . -). No password — this is a demo.</p>
+      <input id="login-username" name="username" placeholder="e.g. alice" autocomplete="off" autofocus required maxlength="32">
+      <button type="submit">Enter</button>
+      <p id="login-error" class="error" hidden></p>
+    </form>
+  </section>
+
+  <!-- App: two panes, contacts on the left, conversation on the right. -->
+  <section id="app" class="screen" hidden>
+    <aside id="sidebar">
+      <header>
+        <span id="me-name"></span>
+        <span id="conn-status" class="status" title="connection">●</span>
+        <button id="logout" class="link">log out</button>
+      </header>
+      <ul id="contacts"></ul>
+    </aside>
+    <main id="chat">
+      <header id="chat-header"><span class="muted">Select a contact to start chatting</span></header>
+      <ol id="messages"></ol>
+      <form id="send-form" hidden>
+        <input id="send-input" placeholder="Type a message" autocomplete="off" maxlength="2000">
+        <button type="submit">Send</button>
+      </form>
+    </main>
+  </section>
+
+  <script src="/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,4 @@
+- Assessment Details & Instructions: (Refer to the attached PDF document)*
+- Submission link for code repo: [Please submit your completed assessment via link to a GitHub/Gitlab/etc... repo]
+- Submission of short video demo of working product (no more than 30s): Please either send a video attachment or send via a google drive link or via an unlisted youtube video link
+- Deadline: Friday, September 04, 2026, by 11:59 PM

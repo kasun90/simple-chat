@@ -1,0 +1,8 @@
+# Assessment PDF is the employer's document; keep it out of the public repo.
+*.pdf
+# Local SQLite database and Go build output.
+/data/
+/bin/
+*.db
+*.db-*
+.DS_Store

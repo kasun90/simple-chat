@@ -1,0 +1,63 @@
+# Build gate: the same checks as `make check`, plus the Docker image build
+# (which itself runs vet + tests, so a broken build can never become an image).
+# On main, the image is also pushed to GHCR so reviewers can run it without
+# cloning: docker run -p 8080:8080 ghcr.io/kasun90/simple-chat
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: gofmt
+        run: |
+          files=$(gofmt -l .)
+          if [ -n "$files" ]; then echo "needs gofmt:"; echo "$files"; exit 1; fi
+      - run: go vet ./...
+      - run: go test -race -count=1 ./...
+      - run: CGO_ENABLED=0 go build ./cmd/server
+
+  docker:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      # The image can pass its internal tests and still fail to run (e.g. a
+      # volume permission problem), so boot the real compose stack and hit it.
+      - name: compose smoke test
+        run: |
+          docker compose up --build -d --wait --wait-timeout 90
+          curl -fsS localhost:8080/healthz
+          curl -fsS -c c.txt -H 'Content-Type: application/json' -d '{"username":"smoke"}' localhost:8080/api/login
+          curl -fsS -b c.txt localhost:8080/api/users
+          docker compose down -v
+      - uses: docker/setup-buildx-action@v3
+      - name: Log in to GHCR
+        if: github.event_name == 'push'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build (and push on main)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: ${{ github.event_name == 'push' }}
+          tags: |
+            ghcr.io/${{ github.repository }}:latest
+            ghcr.io/${{ github.repository }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
