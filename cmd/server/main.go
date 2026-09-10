@@ -32,7 +32,7 @@ func main() {
 	}
 	defer st.Close()
 
-	handler, err := app.New(st, cfg.SeedUsers)
+	handler, err := app.New(st, cfg.SeedUsers, cfg.GroupName)
 	if err != nil {
 		log.Fatalf("wire app: %v", err)
 	}

@@ -39,12 +39,15 @@ type Message struct {
 }
 
 type Group struct {
-	ID int64 `json:"id"`
+	ID      int64   `json:"id"`
+	Name    string  `json:"name"`
+	Members []int64 `json:"members"`
 }
 
 type Store interface {
 	// UpsertUser returns the existing user with that name or creates one.
 	UpsertUser(ctx context.Context, username string) (User, error)
+	UpsertGroup(ctx context.Context, groupName string) error
 	GetUser(ctx context.Context, id int64) (User, error)
 	// ListUsers returns everyone ordered by username.
 	ListUsers(ctx context.Context) ([]User, error)
@@ -63,6 +66,8 @@ type Store interface {
 	ListGroupMessages(ctx context.Context, userID, groupID, afterID int64, limit int) ([]Message, error)
 
 	GroupMembers(ctx context.Context, userID, groupID int64) ([]int64, error)
+
+	ListGroups(ctx context.Context, userID int64) ([]Group, error)
 
 	Close() error
 }

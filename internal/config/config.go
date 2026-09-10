@@ -18,6 +18,7 @@ type Config struct {
 	DBPath string
 	// SeedUsers are created on boot so a demo needs no sign-up step.
 	SeedUsers []string
+	GroupName string
 }
 
 func FromEnv() Config {
@@ -32,6 +33,11 @@ func FromEnv() Config {
 			}
 		}
 	}
+
+	if groupName := os.Getenv("GROUP_NAME"); groupName != "" {
+		c.GroupName = groupName
+	}
+
 	return c
 }
 

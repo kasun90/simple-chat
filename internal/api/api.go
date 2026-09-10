@@ -36,6 +36,7 @@ type contact struct {
 func (h *Handlers) Register(mux *http.ServeMux, sessions *auth.Sessions) {
 	mux.Handle("GET /api/users", sessions.Middleware(http.HandlerFunc(h.listUsers)))
 	mux.Handle("GET /api/conversations/{userID}/messages", sessions.Middleware(http.HandlerFunc(h.listMessages)))
+	mux.Handle("GET /api/groups", sessions.Middleware(http.HandlerFunc(h.listGroups)))
 	mux.Handle("GET /api/groups/{groupID}/messages", sessions.Middleware(http.HandlerFunc(h.listGroupMessages)))
 }
 
@@ -101,6 +102,19 @@ func (h *Handlers) listGroupMessages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, msgs)
+}
+
+func (h *Handlers) listGroups(w http.ResponseWriter, r *http.Request) {
+	me, _ := auth.UserID(r.Context())
+
+	groups, err := h.Store.ListGroups(r.Context(), me)
+	if err != nil {
+		log.Printf("list groups: %v", err)
+		writeError(w, http.StatusInternalServerError, "could not list groups")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, groups)
 }
 
 // Logging is a minimal request log: method, path, status, duration. It is

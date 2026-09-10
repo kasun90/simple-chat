@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS conversations (
     user_b     INTEGER REFERENCES users(id),
     name       TEXT,
     created_at DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
-    CHECK ((user_a IS NULL && user_b IS NULL) || (user_a IS NULL && name IS NOT NULL)),
+    CHECK ((user_a IS NULL AND user_b IS NULL) || (user_a IS NULL AND name IS NOT NULL)),
     CHECK (user_a < user_b),
     UNIQUE (user_a, user_b)
 );

@@ -62,6 +62,12 @@ func (s *SQLite) UpsertUser(ctx context.Context, username string) (User, error) 
 	return scanUser(row)
 }
 
+func (s *SQLite) UpsertGroup(ctx context.Context, groupName string) error {
+	return s.db.QueryRowContext(ctx, `
+		INSERT INTO conversations (name) VALUES (?)
+		ON CONFLICT(name) DO UPDATE set name = name`).Err()
+}
+
 func (s *SQLite) GetUser(ctx context.Context, id int64) (User, error) {
 	u, err := scanUser(s.db.QueryRowContext(ctx, `SELECT id, username, created_at FROM users WHERE id = ?`, id))
 	if errors.Is(err, sql.ErrNoRows) {
@@ -266,6 +272,37 @@ func (s *SQLite) GroupMembers(ctx context.Context, userID, groupID int64) ([]int
 		members = append(members, m)
 	}
 	return members, rows.Err()
+}
+
+func (s *SQLite) ListGroups(ctx context.Context, userID int64) ([]Group, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT c.id
+		FROM conversations c
+		INNER JOIN conversations c ON c.id = cm.conversation_id AND c.id = ?
+		WHERE cm.user_id = ?
+		ORDER BY cm.id`, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	var groups []Group
+	for rows.Next() {
+		var g Group
+		if err := rows.Scan(&g.ID); err != nil {
+			return nil, err
+		}
+		groups = append(groups, g)
+	}
+
+	for _, group := range groups {
+		members, err := s.GroupMembers(ctx, userID, group.ID)
+		if err != nil {
+			return nil, err
+		}
+		group.Members = members
+	}
+
+	return groups, nil
 }
 
 type scanner interface{ Scan(dest ...any) error }
