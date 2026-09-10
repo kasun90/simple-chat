@@ -110,8 +110,65 @@ func (s *SQLite) AppendMessage(ctx context.Context, senderID, recipientID int64,
 	// DO NOTHING + no row returned means the idempotency key already exists;
 	// we then read the original so the caller gets the same ID as the first
 	// attempt and can ack it identically.
-	var m Message
+	m, duplicate, err := insertMessage(ctx, tx, senderID, convID, body, clientMsgID)
+	if err != nil {
+		return Message{}, false, fmt.Errorf("message: %w", err)
+	}
+	// The key is per sender, not per conversation: reusing it towards a
+	// different recipient is a client bug, and returning the old row would
+	// label it with the wrong recipient. Refuse rather than guess.
+	if m.ConversationID != convID {
+		return Message{}, false, ErrClientMsgIDReused
+	}
+	if err := tx.Commit(); err != nil {
+		return Message{}, false, err
+	}
+	m.RecipientID = otherParty(a, b, m.SenderID)
+	return m, duplicate, nil
+}
+
+func (s *SQLite) AppendGroupMessage(ctx context.Context, senderID, groupID int64, body, clientMsgID string) (msg Message, duplicate bool, err error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return Message{}, false, err
+	}
+	defer tx.Rollback() //nolint:errcheck // no-op after Commit
+
+	var exists bool
 	err = tx.QueryRowContext(ctx, `
+		SELECT 1 conversations c
+		INNER JOIN conversation_members cm ON cm.conversation_id = c.id AND cm.user_id = ?
+		WHERE c.id = ?`, senderID, groupID).Scan(&exists)
+	if err != nil {
+		return Message{}, false, fmt.Errorf("group conversation: %w", err)
+	}
+
+	if !exists {
+		return Message{}, false, errors.New("invalid conversation")
+	}
+
+	m, duplicate, err := insertMessage(ctx, tx, senderID, groupID, body, clientMsgID)
+	if err != nil {
+		return Message{}, false, fmt.Errorf(" group message: %w", err)
+	}
+
+	if m.ConversationID != groupID {
+		return Message{}, false, ErrClientMsgIDReused
+	}
+	if err := tx.Commit(); err != nil {
+		return Message{}, false, err
+	}
+
+	return m, duplicate, nil
+
+}
+
+func insertMessage(ctx context.Context, tx *sql.Tx, senderID, convID int64, body, clientMsgID string) (Message, bool, error) {
+	// DO NOTHING + no row returned means the idempotency key already exists;
+	// we then read the original so the caller gets the same ID as the first
+	// attempt and can ack it identically.
+	var m Message
+	err := tx.QueryRowContext(ctx, `
 		INSERT INTO messages (conversation_id, sender_id, body, client_msg_id)
 		VALUES (?, ?, ?, ?)
 		ON CONFLICT(sender_id, client_msg_id) DO NOTHING
@@ -128,16 +185,7 @@ func (s *SQLite) AppendMessage(ctx context.Context, senderID, recipientID int64,
 	if err != nil {
 		return Message{}, false, fmt.Errorf("message: %w", err)
 	}
-	// The key is per sender, not per conversation: reusing it towards a
-	// different recipient is a client bug, and returning the old row would
-	// label it with the wrong recipient. Refuse rather than guess.
-	if m.ConversationID != convID {
-		return Message{}, false, ErrClientMsgIDReused
-	}
-	if err := tx.Commit(); err != nil {
-		return Message{}, false, err
-	}
-	m.RecipientID = otherParty(a, b, m.SenderID)
+
 	return m, duplicate, nil
 }
 
@@ -167,6 +215,57 @@ func (s *SQLite) ListMessages(ctx context.Context, userA, userB, afterID int64, 
 		msgs = append(msgs, m)
 	}
 	return msgs, rows.Err()
+}
+
+func (s *SQLite) ListGroupMessages(ctx context.Context, userID, groupID, afterID int64, limit int) ([]Message, error) {
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT m.id, m.conversation_id, m.sender_id, m.body, m.client_msg_id, m.created_at
+		FROM messages m
+		INNER JOIN conversation_members ON c.user_id = ?
+		WHERE m.conversation_id = ? AND m.id > ?
+		ORDER BY m.id
+		LIMIT ?`, userID, groupID, afterID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	msgs := []Message{} // non-nil so JSON renders [] rather than null
+	for rows.Next() {
+		var m Message
+		if err := rows.Scan(&m.ID, &m.ConversationID, &m.SenderID, &m.Body, &m.ClientMsgID, &m.CreatedAt); err != nil {
+			return nil, err
+		}
+		msgs = append(msgs, m)
+	}
+	return msgs, rows.Err()
+}
+
+func (s *SQLite) GroupMembers(ctx context.Context, userID, groupID int64) ([]int64, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT cm.user_id
+		FROM conversation_members cm
+		INNER JOIN conversations c ON c.id = cm.conversation_id AND c.id = ?
+		WHERE cm.user_id = ?
+		ORDER BY cm.id`, groupID, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var members []int64
+	for rows.Next() {
+		var m int64
+		if err := rows.Scan(&m); err != nil {
+			return nil, err
+		}
+		members = append(members, m)
+	}
+	return members, rows.Err()
 }
 
 type scanner interface{ Scan(dest ...any) error }

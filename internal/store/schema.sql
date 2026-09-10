@@ -14,11 +14,19 @@ CREATE TABLE IF NOT EXISTS users (
 -- can never become two conversations.
 CREATE TABLE IF NOT EXISTS conversations (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_a     INTEGER NOT NULL REFERENCES users(id),
-    user_b     INTEGER NOT NULL REFERENCES users(id),
+    user_a     INTEGER REFERENCES users(id),
+    user_b     INTEGER REFERENCES users(id),
+    name       TEXT,
     created_at DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    CHECK ((user_a IS NULL && user_b IS NULL) || (user_a IS NULL && name IS NOT NULL)),
     CHECK (user_a < user_b),
     UNIQUE (user_a, user_b)
+);
+
+CREATE TABLE IF NOT EXISTS conversation_members (
+    user_id         INTEGER NOT NULL REFERENCES users(id),
+    conversation_id INTEGER NOT NULL REFERENCES conversations(id),
+    PRIMARY KEY (user_id, conversation_id)
 );
 
 CREATE TABLE IF NOT EXISTS messages (

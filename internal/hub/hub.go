@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log"
+	"slices"
 	"sync"
 	"time"
 	"unicode/utf8"
@@ -38,6 +39,7 @@ const sendBuffer = 64
 type Inbound struct {
 	Type        string `json:"type"` // "send"
 	To          int64  `json:"to"`
+	GroupID     int64  `json:"groupID"`
 	Body        string `json:"body"`
 	ClientMsgID string `json:"clientMsgId"`
 }
@@ -120,15 +122,28 @@ func (h *Hub) handleInbound(ctx context.Context, from int64, in Inbound) string 
 	if in.Type != "send" {
 		return "unknown message type"
 	}
-	if in.To == 0 || in.To == from {
-		return "invalid recipient"
+
+	if in.To == 0 || in.GroupID == 0 {
+		return "should be a recipient or a group"
 	}
+
 	if in.Body == "" || utf8.RuneCountInString(in.Body) > MaxBodyRunes {
 		return "body must be 1-2000 characters"
 	}
+
 	if in.ClientMsgID == "" || len(in.ClientMsgID) > 64 {
 		return "clientMsgId required"
 	}
+
+	if in.GroupID != 0 {
+		return h.sendToGroup(ctx, from, in)
+	}
+
+	// 1:1 flow stays same
+	if in.To == from {
+		return "invalid recipient"
+	}
+
 	if _, err := h.store.GetUser(ctx, in.To); err != nil {
 		return "unknown recipient"
 	}
@@ -151,6 +166,37 @@ func (h *Hub) handleInbound(ctx context.Context, from int64, in Inbound) string 
 		return ""
 	}
 	h.broadcast(Outbound{Type: "message", Message: &msg}, from, in.To)
+	return ""
+}
+
+func (h *Hub) sendToGroup(ctx context.Context, from int64, in Inbound) string {
+	members, err := h.store.GroupMembers(ctx, from, in.GroupID)
+	if err != nil {
+		return "couldnt fetch members"
+	}
+
+	if !slices.Contains(members, from) {
+		return "not a member in this group"
+	}
+
+	msg, duplicate, err := h.store.AppendGroupMessage(ctx, from, in.GroupID, in.Body, in.ClientMsgID)
+	if errors.Is(err, store.ErrClientMsgIDReused) {
+		return "clientMsgId already used for another conversation"
+	}
+
+	if err != nil {
+		log.Printf("append message: %v", err)
+		return "could not store message"
+	}
+
+	if duplicate {
+		// A retry after a lost ack: the recipient already has it. Re-deliver
+		// only to the sender so its UI can clear the pending state.
+		h.broadcast(Outbound{Type: "message", Message: &msg}, from)
+		return ""
+	}
+
+	h.broadcast(Outbound{Type: "message", Message: &msg}, members...)
 	return ""
 }
 

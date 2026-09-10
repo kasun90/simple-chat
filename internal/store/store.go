@@ -38,6 +38,10 @@ type Message struct {
 	CreatedAt   time.Time `json:"createdAt"`
 }
 
+type Group struct {
+	ID int64 `json:"id"`
+}
+
 type Store interface {
 	// UpsertUser returns the existing user with that name or creates one.
 	UpsertUser(ctx context.Context, username string) (User, error)
@@ -53,6 +57,12 @@ type Store interface {
 	// ID greater than afterID, oldest first. Cursor pagination on the ID
 	// (rather than OFFSET) stays correct while new rows are being inserted.
 	ListMessages(ctx context.Context, userA, userB, afterID int64, limit int) ([]Message, error)
+
+	AppendGroupMessage(ctx context.Context, senderID, groupID int64, body, clientMsgID string) (msg Message, duplicate bool, err error)
+
+	ListGroupMessages(ctx context.Context, userID, groupID, afterID int64, limit int) ([]Message, error)
+
+	GroupMembers(ctx context.Context, userID, groupID int64) ([]int64, error)
 
 	Close() error
 }

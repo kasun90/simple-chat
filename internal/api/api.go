@@ -36,6 +36,7 @@ type contact struct {
 func (h *Handlers) Register(mux *http.ServeMux, sessions *auth.Sessions) {
 	mux.Handle("GET /api/users", sessions.Middleware(http.HandlerFunc(h.listUsers)))
 	mux.Handle("GET /api/conversations/{userID}/messages", sessions.Middleware(http.HandlerFunc(h.listMessages)))
+	mux.Handle("GET /api/groups/{groupID}/messages", sessions.Middleware(http.HandlerFunc(h.listGroupMessages)))
 }
 
 // listUsers returns everyone except the caller. The whole table is returned:
@@ -75,6 +76,27 @@ func (h *Handlers) listMessages(w http.ResponseWriter, r *http.Request) {
 	msgs, err := h.Store.ListMessages(r.Context(), me, other, after, limit)
 	if err != nil {
 		log.Printf("list messages %d<->%d: %v", me, other, err)
+		writeError(w, http.StatusInternalServerError, "could not list messages")
+		return
+	}
+	writeJSON(w, http.StatusOK, msgs)
+}
+
+func (h *Handlers) listGroupMessages(w http.ResponseWriter, r *http.Request) {
+	me, _ := auth.UserID(r.Context())
+
+	groupID, err := strconv.ParseInt(r.PathValue("groupID"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid group id")
+		return
+	}
+
+	after, _ := strconv.ParseInt(r.URL.Query().Get("after"), 10, 64)
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+
+	msgs, err := h.Store.ListGroupMessages(r.Context(), me, groupID, after, limit)
+	if err != nil {
+		log.Printf("list group messages %d<->%d: %v", me, groupID, err)
 		writeError(w, http.StatusInternalServerError, "could not list messages")
 		return
 	}
