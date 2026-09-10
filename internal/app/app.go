@@ -15,14 +15,14 @@ import (
 )
 
 // New wires store, sessions, hub, API and frontend into one handler.
-func New(st store.Store, seedUsers []string, groupName string) (http.Handler, error) {
+func New(st store.Store, seedUsers []string, groupName string, groupMembers []string) (http.Handler, error) {
 	for _, name := range seedUsers {
 		if _, err := st.UpsertUser(context.Background(), name); err != nil {
 			return nil, err
 		}
 	}
 
-	if groupName != "" {
+	if groupName != "" && len(groupMembers) > 0 {
 		if err := st.UpsertGroup(context.Background(), groupName); err != nil {
 			return nil, err
 		}

@@ -63,9 +63,34 @@ func (s *SQLite) UpsertUser(ctx context.Context, username string) (User, error) 
 }
 
 func (s *SQLite) UpsertGroup(ctx context.Context, groupName string) error {
-	return s.db.QueryRowContext(ctx, `
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback() //nolint:errcheck // no-op after Commit
+
+	var groupID int64
+	err = tx.QueryRowContext(ctx, `
 		INSERT INTO conversations (name) VALUES (?)
-		ON CONFLICT(name) DO UPDATE set name = name`).Err()
+		RETURNING id`, &groupID).Err()
+	if err != nil {
+		return err
+	}
+
+	users, err := s.ListUsers(ctx)
+	if err != nil {
+		return err
+	}
+
+	for _, user := range users {
+		err = tx.QueryRowContext(ctx, `
+			INSERT INTO conversation_members (user_id, conversation_id) VALUES (?, ?)`, user.ID, groupID).Err()
+		if err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit()
 }
 
 func (s *SQLite) GetUser(ctx context.Context, id int64) (User, error) {

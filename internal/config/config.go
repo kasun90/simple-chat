@@ -17,8 +17,9 @@ type Config struct {
 	// be mounted there and history survives container restarts.
 	DBPath string
 	// SeedUsers are created on boot so a demo needs no sign-up step.
-	SeedUsers []string
-	GroupName string
+	SeedUsers    []string
+	GroupName    string
+	GroupMembers []string
 }
 
 func FromEnv() Config {
@@ -36,6 +37,14 @@ func FromEnv() Config {
 
 	if groupName := os.Getenv("GROUP_NAME"); groupName != "" {
 		c.GroupName = groupName
+	}
+
+	if gm := os.Getenv("GROUP_MEMBERS"); gm != "" {
+		for _, gms := range strings.Split(gm, ",") {
+			if gms = strings.TrimSpace(gms); gms != "" {
+				c.GroupMembers = append(c.GroupMembers, gms)
+			}
+		}
 	}
 
 	return c

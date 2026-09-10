@@ -1,7 +1,7 @@
 .PHONY: run test vet build check docker-up docker-down demo
 
 run:            ## Run locally on :8080 with seeded demo users
-	SEED_USERS=alice,bob go run ./cmd/server
+	SEED_USERS=alice,bob,alex GROUP_NAME=GovTech go run ./cmd/server
 
 test:           ## Unit tests with the race detector
 	go test -race -count=1 ./...
